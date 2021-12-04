@@ -1,0 +1,422 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Parameters": {
+        "S3Key": {
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "APIGateway": {
+            "Type": "AWS::ApiGateway::RestApi",
+            "Properties": {
+                "Name": "blog-api-global",
+                "Description": "Blog API Gateway",
+                "EndpointConfiguration": {
+                    "Types": [
+                        "REGIONAL"
+                    ]
+                }
+            }
+        },
+        "Deployment": {
+            "Type": "AWS::ApiGateway::Deployment",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "APIGateway"
+                },
+                "StageName": "prod"
+            },
+            "DependsOn": [
+                "ArticlesIndexMethod",
+                "ArticlesShowMethod",
+                "ArticlesCorsMethod",
+                "ArticleCorsMethod"
+            ]
+        },
+        "ArticlesIndexFunctionPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "FunctionName": {
+                    "Ref": "ArticlesIndexFunction"
+                },
+                "Action": "lambda:InvokeFunction",
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "arn:aws:execute-api:",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            ":",
+                            {
+                                "Ref": "AWS::AccountId"
+                            },
+                            ":",
+                            {
+                                "Ref": "APIGateway"
+                            },
+                            "/*/*/*"
+                        ]
+                    ]
+                }
+            }
+        },
+        "ArticlesShowFunctionPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "FunctionName": {
+                    "Ref": "ArticlesShowFunction"
+                },
+                "Action": "lambda:InvokeFunction",
+                "Principal": "apigateway.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "arn:aws:execute-api:",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            ":",
+                            {
+                                "Ref": "AWS::AccountId"
+                            },
+                            ":",
+                            {
+                                "Ref": "APIGateway"
+                            },
+                            "/*/*/*"
+                        ]
+                    ]
+                }
+            }
+        },
+        "ArticlesIndexFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "jpb-blog-",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "-artifacts"
+                            ]
+                        ]
+                    },
+                    "S3Key": {
+                        "Ref": "S3Key"
+                    }
+                },
+                "Handler": "index.handler",
+                "Environment": {
+                    "Variables": {
+                        "DEPLOYMENT_REGION": {
+                            "Ref": "AWS::Region"
+                        }
+                    }
+                },
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "BlogFunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs12.x",
+                "Timeout": 10
+            }
+        },
+        "ArticlesShowFunction": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "jpb-blog-",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "-artifacts"
+                            ]
+                        ]
+                    },
+                    "S3Key": {
+                        "Ref": "S3Key"
+                    }
+                },
+                "Handler": "show.handler",
+                "Environment": {
+                    "Variables": {
+                        "DEPLOYMENT_REGION": {
+                            "Ref": "AWS::Region"
+                        }
+                    }
+                },
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "BlogFunctionRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs12.x",
+                "Timeout": 10
+            }
+        },
+        "BlogFunctionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "BlogFunctionPolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents",
+                                        "logs:DescribeLogStreams",
+                                        "logs:DescribeLogGroups"
+                                    ],
+                                    "Resource": "arn:aws:logs:*:*:*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "dynamodb:GetItem",
+                                        "dynamodb:Query",
+                                        "dynamodb:Scan"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Join": [
+                                            "",
+                                            [
+                                                "arn:aws:dynamodb:",
+                                                {
+                                                    "Ref": "AWS::Region"
+                                                },
+                                                ":",
+                                                {
+                                                    "Ref": "AWS::AccountId"
+                                                },
+                                                ":table/blog_articles"
+                                            ]
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "ArticlesResource": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "APIGateway"
+                },
+                "ParentId": {
+                    "Fn::GetAtt": [
+                        "APIGateway",
+                        "RootResourceId"
+                    ]
+                },
+                "PathPart": "articles"
+            }
+        },
+        "ArticleResource": {
+            "Type": "AWS::ApiGateway::Resource",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "APIGateway"
+                },
+                "ParentId": {
+                    "Ref": "ArticlesResource"
+                },
+                "PathPart": "{slug}"
+            }
+        },
+        "ArticlesIndexMethod": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "APIGateway"
+                },
+                "ResourceId": {
+                    "Ref": "ArticlesResource"
+                },
+                "HttpMethod": "GET",
+                "AuthorizationType": "NONE",
+                "Integration": {
+                    "Type": "AWS_PROXY",
+                    "IntegrationHttpMethod": "POST",
+                    "Uri": {
+                        "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ArticlesIndexFunction.Arn}/invocations"
+                    }
+                }
+            }
+        },
+        "ArticlesShowMethod": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "APIGateway"
+                },
+                "ResourceId": {
+                    "Ref": "ArticleResource"
+                },
+                "HttpMethod": "GET",
+                "AuthorizationType": "NONE",
+                "Integration": {
+                    "Type": "AWS_PROXY",
+                    "IntegrationHttpMethod": "POST",
+                    "Uri": {
+                        "Fn::Sub": "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ArticlesShowFunction.Arn}/invocations"
+                    }
+                }
+            }
+        },
+        "ArticlesCorsMethod": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "APIGateway"
+                },
+                "ResourceId": {
+                    "Ref": "ArticlesResource"
+                },
+                "HttpMethod": "OPTIONS",
+                "AuthorizationType": "NONE",
+                "Integration": {
+                    "Type": "MOCK",
+                    "PassthroughBehavior": "NEVER",
+                    "RequestTemplates": {
+                        "application/json": "{\"statusCode\":200}"
+                    }
+                }
+            }
+        },
+        "ArticleCorsMethod": {
+            "Type": "AWS::ApiGateway::Method",
+            "Properties": {
+                "RestApiId": {
+                    "Ref": "APIGateway"
+                },
+                "ResourceId": {
+                    "Ref": "ArticleResource"
+                },
+                "HttpMethod": "OPTIONS",
+                "AuthorizationType": "NONE",
+                "Integration": {
+                    "Type": "MOCK",
+                    "PassthroughBehavior": "NEVER",
+                    "RequestTemplates": {
+                        "application/json": "{\"statusCode\":200}"
+                    }
+                }
+            }
+        },
+        "GlobalDomainCertificate": {
+            "Type": "AWS::CertificateManager::Certificate",
+            "Properties": {
+                "DomainName": "global.jpb.dev",
+                "DomainValidationOptions": [
+                    {
+                        "DomainName": "global.jpb.dev",
+                        "HostedZoneId": "Z0008572YHCY1LBDVBQW"
+                    }
+                ],
+                "ValidationMethod": "DNS"
+            }
+        },
+        "GlobalDomain": {
+            "Type": "AWS::ApiGateway::DomainName",
+            "Properties": {
+                "DomainName": "global.jpb.dev",
+                "EndpointConfiguration": {
+                    "Types": [
+                        "REGIONAL"
+                    ]
+                },
+                "RegionalCertificateArn": {
+                    "Ref": "GlobalDomainCertificate"
+                },
+                "SecurityPolicy": "TLS_1_2"
+            }
+        },
+        "DomainMapping": {
+            "Type": "AWS::ApiGateway::BasePathMapping",
+            "Properties": {
+                "DomainName": {
+                    "Ref": "GlobalDomain"
+                },
+                "RestApiId": {
+                    "Ref": "APIGateway"
+                },
+                "Stage": "prod"
+            }
+        },
+        "Route53LatencyRecord": {
+            "Type": "AWS::Route53::RecordSet",
+            "Properties": {
+                "HostedZoneId": "Z0008572YHCY1LBDVBQW",
+                "Name": "global.jpb.dev",
+                "Type": "A",
+                "AliasTarget": {
+                    "HostedZoneId": {
+                        "Fn::GetAtt": [
+                            "GlobalDomain",
+                            "RegionalHostedZoneId"
+                        ]
+                    },
+                    "DNSName": {
+                        "Fn::GetAtt": [
+                            "GlobalDomain",
+                            "RegionalDomainName"
+                        ]
+                    },
+                    "EvaluateTargetHealth": "true"
+                },
+                "Region": {
+                    "Ref": "AWS::Region"
+                },
+                "SetIdentifier": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "global-jpb-dev-",
+                            {
+                                "Ref": "AWS::Region"
+                            }
+                        ]
+                    ]
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,22 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Resources": {
+        "S3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "jpb-blog-",
+                            {
+                                "Ref": "AWS::Region"
+                            },
+                            "-artifacts"
+                        ]
+                    ]
+                }
+            }
+        }
+    }
+}
